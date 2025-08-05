@@ -8,36 +8,42 @@ import (
 	"github.com/PavelBradnitski/WbTechL2/internal/repositories"
 )
 
+// EventService provides methods to manage events.
 type EventService struct {
 	repo *repositories.EventRepository
 }
 
+// NewEventService creates a new instance of EventService with the provided repository.
 func NewEventService(repo *repositories.EventRepository) *EventService {
 	return &EventService{repo: repo}
 }
 
+// CreateEvent creates a new event and returns its ID.
 func (s *EventService) CreateEvent(ctx context.Context, Event *models.Event) (int, error) {
 	return s.repo.Create(ctx, Event)
 }
-func (s *EventService) GetEvent(ctx context.Context, user_id int, date string) (models.Event, error) {
-	return s.repo.GetEvent(ctx, user_id)
-}
-func (s *EventService) GetEventsForDay(ctx context.Context, user_id int, date time.Time) ([]models.Event, error) {
-	return s.repo.GetEventsForDay(ctx, user_id, date)
+
+// GetEventsForDay retrieves events for a user within a specified date range.
+func (s *EventService) GetEventsForDay(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	return s.repo.GetEventsForDay(ctx, userID, date)
 }
 
-func (s *EventService) GetEventsForWeek(ctx context.Context, user_id int, date time.Time) ([]models.Event, error) {
-	return s.repo.GetEventsForWeek(ctx, user_id, date)
+// GetEventsForWeek retrieves events for a user within a specified week.
+func (s *EventService) GetEventsForWeek(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	return s.repo.GetEventsForWeek(ctx, userID, date)
 }
 
-func (s *EventService) GetEventsForMonth(ctx context.Context, user_id int, date time.Time) ([]models.Event, error) {
-	return s.repo.GetEventsForMonth(ctx, user_id, date)
+// GetEventsForMonth retrieves events for a user within a specified month.
+func (s *EventService) GetEventsForMonth(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	return s.repo.GetEventsForMonth(ctx, userID, date)
 }
 
-func (s *EventService) UpdateEvent(ctx context.Context, Event *models.Event) error {
-	return s.repo.Update(ctx, Event)
+// UpdateEventByUser updates an existing event by user ID.
+func (s *EventService) UpdateEventByUser(ctx context.Context, Event *models.Event) error {
+	return s.repo.UpdateByUser(ctx, Event)
 }
 
-func (s *EventService) DeleteEvent(ctx context.Context, group, Event string) error {
-	return s.repo.DeleteByGroupAndEvent(ctx, group, Event)
+// DeleteEventByUser deletes an event by user ID and event ID.
+func (s *EventService) DeleteEventByUser(ctx context.Context, userID, id int) error {
+	return s.repo.DeleteByUser(ctx, userID, id)
 }

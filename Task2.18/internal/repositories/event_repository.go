@@ -9,12 +9,14 @@ import (
 	"github.com/PavelBradnitski/WbTechL2/internal/models"
 )
 
+// EventRepository provides methods to interact with the event data store.
 type EventRepository struct {
 	events map[int]models.Event
 	nextID int
 	mu     sync.RWMutex
 }
 
+// NewEventRepo creates a new instance of EventRepository.
 func NewEventRepo() *EventRepository {
 	return &EventRepository{
 		events: make(map[int]models.Event),
@@ -23,6 +25,7 @@ func NewEventRepo() *EventRepository {
 	}
 }
 
+// Create adds a new event to the repository and returns its ID.
 func (er *EventRepository) Create(ctx context.Context, event *models.Event) (int, error) {
 	er.mu.Lock()
 	defer er.mu.Unlock()
@@ -35,58 +38,89 @@ func (er *EventRepository) Create(ctx context.Context, event *models.Event) (int
 	er.events[newEvent.ID] = newEvent
 	er.nextID++
 	fmt.Println(er.events)
-	return newEvent.ID, nil
+	return er.nextID, nil
 }
 
-func (ed *EventRepository) GetEvent(ctx context.Context, userID int) (models.Event, error) {
-	return models.Event{}, nil
-}
-func (ed *EventRepository) GetEventsForDay(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+// GetEventsForDay retrieves an event by user ID and date for a day.
+func (er *EventRepository) GetEventsForDay(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	er.mu.RLock()
+	defer er.mu.RUnlock()
 	startDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endDate := startDate.AddDate(0, 0, 1)
 
-	return ed.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
+	return er.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
 }
 
-func (ed *EventRepository) GetEventsForWeek(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+// GetEventsForWeek retrieves events for a user for a week starting from the given date.
+func (er *EventRepository) GetEventsForWeek(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	er.mu.RLock()
+	defer er.mu.RUnlock()
 	startDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endDate := startDate.AddDate(0, 0, 7)
 
-	return ed.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
+	return er.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
 }
 
-func (ed *EventRepository) GetEventsForMonth(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+// GetEventsForMonth retrieves events for a user for a month starting from the given date.
+func (er *EventRepository) GetEventsForMonth(ctx context.Context, userID int, date time.Time) ([]models.Event, error) {
+	er.mu.RLock()
+	defer er.mu.RUnlock()
 	startDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	endDate := startDate.AddDate(0, 1, 0)
 
-	return ed.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
+	return er.GetEventsByUserIDAndDateRange(userID, startDate, endDate)
 }
 
-// GetEventsByUserIDAndDateRange возвращает события для указанного user_id в заданном диапазоне дат.
-func (ed *EventRepository) GetEventsByUserIDAndDateRange(userID int, startDate, endDate time.Time) ([]models.Event, error) {
-	ed.mu.RLock()
-	defer ed.mu.RUnlock()
+// GetEventsByUserIDAndDateRange retrieves events for a user within a specified date range.
+func (er *EventRepository) GetEventsByUserIDAndDateRange(userID int, startDate, endDate time.Time) ([]models.Event, error) {
+	er.mu.RLock()
+	defer er.mu.RUnlock()
 
 	filteredEvents := []models.Event{}
-	for _, event := range ed.events {
-		eventTime, err := time.Parse(time.DateOnly, event.Date)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing date %s: %v", event.Date, err)
+	for _, event := range er.events {
+		if userID == event.UserID {
+			eventTime, err := time.Parse(time.DateOnly, event.Date)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing date %s: %v", event.Date, err)
+			}
+			if !eventTime.Before(startDate) && !eventTime.After(endDate) {
+				filteredEvents = append(filteredEvents, event)
+			}
 		}
-		if !eventTime.Before(startDate) && !eventTime.After(endDate) {
-			filteredEvents = append(filteredEvents, event)
-		}
-	}
-	if len(filteredEvents) == 0 {
-		// return nil, fmt.Errorf("no events")
-		return nil, nil
 	}
 	return filteredEvents, nil
 }
-func (r *EventRepository) Update(ctx context.Context, Event *models.Event) error {
+
+// UpdateByUser updates an existing event by user ID.
+func (er *EventRepository) UpdateByUser(ctx context.Context, event *models.Event) error {
+	er.mu.Lock()
+	defer er.mu.Unlock()
+
+	existing, exists := er.events[event.ID]
+	if !exists {
+		return fmt.Errorf("event not found")
+	}
+	if existing.UserID != event.UserID {
+		return fmt.Errorf("event does not belong to the user")
+	}
+
+	er.events[event.ID] = *event
 	return nil
 }
 
-func (r *EventRepository) DeleteByGroupAndEvent(ctx context.Context, group, Event string) error {
+// DeleteByUser deletes an event by user ID and event ID.
+func (er *EventRepository) DeleteByUser(ctx context.Context, userID, id int) error {
+	er.mu.Lock()
+	defer er.mu.Unlock()
+
+	existing, exists := er.events[id]
+	if !exists {
+		return fmt.Errorf("event not found")
+	}
+	if existing.UserID != userID {
+		return fmt.Errorf("event does not belong to the user")
+	}
+
+	delete(er.events, id)
 	return nil
 }
