@@ -17,7 +17,7 @@ import (
 
 // EventHandler handles HTTP requests related to events.
 type EventHandler struct {
-	service *services.EventService
+	service services.EventService
 }
 
 // APIResponse is a standard response structure for API responses.
@@ -27,7 +27,7 @@ type APIResponse struct {
 }
 
 // NewEventHandler creates a new EventHandler with the provided service.
-func NewEventHandler(service *services.EventService) *EventHandler {
+func NewEventHandler(service services.EventService) *EventHandler {
 	return &EventHandler{service: service}
 }
 
@@ -81,17 +81,17 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 func (h *EventHandler) GetEventsForDay(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	if userIDStr == "" {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrUserIDRequired))
-		return
-	}
-	date := c.Query("date")
-	if date == "" {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrDateRequired))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrUserIDRequired))
 		return
 	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
+		return
+	}
+	date := c.Query("date")
+	if date == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrDateRequired))
 		return
 	}
 	d, err := time.Parse(time.DateOnly, date)
@@ -112,18 +112,26 @@ func (h *EventHandler) GetEventsForDay(c *gin.Context) {
 // GetEventsForWeek handles the retrieval of events for a specific user for a week.
 func (h *EventHandler) GetEventsForWeek(c *gin.Context) {
 	userIDStr := c.Query("user_id")
+	if userIDStr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrUserIDRequired))
+		return
+	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
 		return
 	}
-	dateStr := c.Query("date")
-	date, err := time.Parse(time.DateOnly, dateStr)
+	date := c.Query("date")
+	if date == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrDateRequired))
+		return
+	}
+	d, err := time.Parse(time.DateOnly, date)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
-	Events, err := h.service.GetEventsForWeek(c, userID, date)
+	Events, err := h.service.GetEventsForWeek(c, userID, d)
 	if err != nil {
 		log.Printf("getEventsForWeek error: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrFailedToRetrieveEvents))
@@ -135,12 +143,20 @@ func (h *EventHandler) GetEventsForWeek(c *gin.Context) {
 // GetEventsForMonth handles the retrieval of events for a specific user for a month.
 func (h *EventHandler) GetEventsForMonth(c *gin.Context) {
 	userIDStr := c.Query("user_id")
+	if userIDStr == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrUserIDRequired))
+		return
+	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
 		return
 	}
 	date := c.Query("date")
+	if date == "" {
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrDateRequired))
+		return
+	}
 	d, err := time.Parse(time.DateOnly, date)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
