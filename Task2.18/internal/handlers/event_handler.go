@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/PavelBradnitski/WbTechL2/internal/middleware"
 	"github.com/PavelBradnitski/WbTechL2/internal/models"
 	"github.com/PavelBradnitski/WbTechL2/internal/services"
 
@@ -41,6 +43,7 @@ func ErrorResponse(err error) APIResponse {
 
 // RegisterRoutes registers the event-related routes with the provided router.
 func (h *EventHandler) RegisterRoutes(router *gin.Engine) {
+	router.Use(middleware.LoggerToFile())
 	EventGroup := router.Group("/Events")
 	{
 		EventGroup.POST("/create_event", h.CreateEvent)
@@ -61,14 +64,14 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 	}
 	_, err := time.Parse(time.DateOnly, event.Date)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("invalid date format. Use YYYY-MM-DD")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
 
 	id, err := h.service.CreateEvent(c, &event)
 	if err != nil {
 		log.Printf("createEvent error: %v", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to create Event")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrEventCreationFailed))
 		return
 	}
 	c.JSON(http.StatusOK, SuccessResponse(gin.H{"id": id}))
@@ -78,28 +81,28 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 func (h *EventHandler) GetEventsForDay(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	if userIDStr == "" {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("user_id must be entered")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrUserIDRequired))
 		return
 	}
 	date := c.Query("date")
 	if date == "" {
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("date must be entered")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrDateRequired))
 		return
 	}
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("fail to convert user_id into a number")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
 		return
 	}
 	d, err := time.Parse(time.DateOnly, date)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("invalid date format. Use YYYY-MM-DD")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
 	events, err := h.service.GetEventsForDay(c, userID, d)
 	if err != nil {
 		log.Printf("getEventsForDay error: %v", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to retrieve Events")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrFailedToRetrieveEvents))
 		return
 	}
 
@@ -111,19 +114,19 @@ func (h *EventHandler) GetEventsForWeek(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("fail to convert user_id into a number")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
 		return
 	}
 	dateStr := c.Query("date")
 	date, err := time.Parse(time.DateOnly, dateStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("invalid date format. Use YYYY-MM-DD")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
 	Events, err := h.service.GetEventsForWeek(c, userID, date)
 	if err != nil {
 		log.Printf("getEventsForWeek error: %v", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to retrieve Events")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrFailedToRetrieveEvents))
 		return
 	}
 	c.JSON(http.StatusOK, SuccessResponse(Events))
@@ -134,19 +137,19 @@ func (h *EventHandler) GetEventsForMonth(c *gin.Context) {
 	userIDStr := c.Query("user_id")
 	userID, err := strconv.Atoi(userIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("fail to convert user_id into a number")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidUserID))
 		return
 	}
 	date := c.Query("date")
 	d, err := time.Parse(time.DateOnly, date)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("invalid date format. Use YYYY-MM-DD")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
 	Events, err := h.service.GetEventsForMonth(c, userID, d)
 	if err != nil {
 		log.Printf("getEventsForMonth error: %v", err)
-		c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to retrieve Events")))
+		c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrFailedToRetrieveEvents))
 		return
 	}
 
@@ -163,7 +166,7 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 
 	_, err := time.Parse(time.DateOnly, event.Date)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse(fmt.Errorf("invalid date format. Use YYYY-MM-DD")))
+		c.JSON(http.StatusBadRequest, ErrorResponse(models.ErrInvalidEventDateFormat))
 		return
 	}
 
@@ -171,15 +174,15 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 	err = h.service.UpdateEventByUser(ctx, &event)
 	if err != nil {
 		log.Printf("updateEvent error: %v", err)
-		switch err.Error() {
-		case "event not found":
-			c.JSON(http.StatusServiceUnavailable, ErrorResponse(fmt.Errorf("event not found")))
+		switch {
+		case errors.Is(err, models.ErrEventNotFound):
+			c.JSON(http.StatusServiceUnavailable, ErrorResponse(models.ErrEventNotFound))
 			return
-		case "event does not belong to the user":
-			c.JSON(http.StatusServiceUnavailable, ErrorResponse(fmt.Errorf("event does not belong to the user")))
+		case errors.Is(err, models.ErrEventDoesNotBelongToUser):
+			c.JSON(http.StatusServiceUnavailable, ErrorResponse(models.ErrEventDoesNotBelongToUser))
 			return
 		default:
-			c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to update Event")))
+			c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrEventUpdateFailed))
 			return
 		}
 	}
@@ -200,15 +203,15 @@ func (h *EventHandler) DeleteEvent(c *gin.Context) {
 	err := h.service.DeleteEventByUser(c, req.UserID, req.ID)
 	if err != nil {
 		log.Printf("deleteEvent error: %v", err)
-		switch err.Error() {
-		case "event not found":
-			c.JSON(http.StatusServiceUnavailable, ErrorResponse(fmt.Errorf("event not found")))
+		switch {
+		case errors.Is(err, models.ErrEventNotFound):
+			c.JSON(http.StatusServiceUnavailable, ErrorResponse(models.ErrEventNotFound))
 			return
-		case "event does not belong to the user":
-			c.JSON(http.StatusServiceUnavailable, ErrorResponse(fmt.Errorf("event does not belong to the user")))
+		case errors.Is(err, models.ErrEventDoesNotBelongToUser):
+			c.JSON(http.StatusServiceUnavailable, ErrorResponse(models.ErrEventDoesNotBelongToUser))
 			return
 		default:
-			c.JSON(http.StatusInternalServerError, ErrorResponse(fmt.Errorf("failed to delete Event")))
+			c.JSON(http.StatusInternalServerError, ErrorResponse(models.ErrEventDeletionFailed))
 			return
 		}
 	}

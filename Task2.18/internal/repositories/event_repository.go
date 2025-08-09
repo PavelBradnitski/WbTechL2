@@ -12,7 +12,7 @@ import (
 // EventRepository provides methods to interact with the event data store.
 type EventRepository struct {
 	events map[int]models.Event
-	nextID int
+	nextID int // Next ID to be assigned to a new event
 	mu     sync.RWMutex
 }
 
@@ -37,8 +37,7 @@ func (er *EventRepository) Create(ctx context.Context, event *models.Event) (int
 	}
 	er.events[newEvent.ID] = newEvent
 	er.nextID++
-	fmt.Println(er.events)
-	return er.nextID, nil
+	return newEvent.ID, nil
 }
 
 // GetEventsForDay retrieves an event by user ID and date for a day.
@@ -98,10 +97,10 @@ func (er *EventRepository) UpdateByUser(ctx context.Context, event *models.Event
 
 	existing, exists := er.events[event.ID]
 	if !exists {
-		return fmt.Errorf("event not found")
+		return models.ErrEventNotFound
 	}
 	if existing.UserID != event.UserID {
-		return fmt.Errorf("event does not belong to the user")
+		return models.ErrEventDoesNotBelongToUser
 	}
 
 	er.events[event.ID] = *event
@@ -115,10 +114,10 @@ func (er *EventRepository) DeleteByUser(ctx context.Context, userID, id int) err
 
 	existing, exists := er.events[id]
 	if !exists {
-		return fmt.Errorf("event not found")
+		return models.ErrEventNotFound
 	}
 	if existing.UserID != userID {
-		return fmt.Errorf("event does not belong to the user")
+		return models.ErrEventDoesNotBelongToUser
 	}
 
 	delete(er.events, id)
