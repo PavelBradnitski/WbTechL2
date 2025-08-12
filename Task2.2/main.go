@@ -7,7 +7,7 @@ func test() (x int) {
 		x++
 	}()
 	x = 1
-	return // defer выполняется и x инкрементируется
+	return // defer выполняется и x инкрементируется, возвращает 2
 }
 
 func anotherTest() int {
