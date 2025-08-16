@@ -1,4 +1,0 @@
-banana	1	y
-apple	2	x
-cherry	10	z
-banana	3	a
