@@ -28,8 +28,8 @@ func main() {
 		if options.separated && !strings.Contains(line, options.delimiter) {
 			continue
 		}
-
-		selectedLine := selectFields(line, options)
+		fieldsIdx := parseFieldsList(options.fields)
+		selectedLine := selectFields(line, options, fieldsIdx)
 		fmt.Println(selectedLine)
 	}
 
@@ -58,40 +58,72 @@ func parseCommandLineFlags() cutOptions {
 
 	return options
 }
-
-// selectFields выбирает указанные поля (колонки) из строки
-func selectFields(line string, options cutOptions) string {
-	if options.fields == "" {
+func selectFields(line string, options cutOptions, fieldsIdx []int) string {
+	// если поля не заданы – возвращаем строку целиком
+	if len(fieldsIdx) == 0 {
 		return line
 	}
 
+	// если включён separated, но в строке нет разделителя → пропускаем
 	if options.separated && !strings.Contains(line, options.delimiter) {
 		return ""
 	}
 
-	var fields []string
+	// специальный случай для табуляции
 	if options.delimiter == "\t" {
-		fields = strings.Fields(line)
-	} else {
-		fields = strings.Split(line, options.delimiter)
+		fields := strings.Fields(line)
+		var b strings.Builder
+		for i, idx := range fieldsIdx {
+			if idx > 0 && idx <= len(fields) {
+				if i > 0 {
+					b.WriteByte(' ') // cut заменяет \t на пробел
+				}
+				b.WriteString(fields[idx-1])
+			}
+		}
+		return b.String()
 	}
 
-	fieldsIdx := parseFieldsList(options.fields)
-	selectedFields := make([]string, 0, len(fieldsIdx))
+	// оптимизация для 1-символьного разделителя (например, , ;)
+	if len(options.delimiter) == 1 {
+		return fastSelect(line, options.delimiter[0], fieldsIdx)
+	}
 
-	for _, idx := range fieldsIdx {
+	// общий случай (много-символьный разделитель)
+	fields := strings.Split(line, options.delimiter)
+	var b strings.Builder
+	for i, idx := range fieldsIdx {
 		if idx > 0 && idx <= len(fields) {
-			selectedFields = append(selectedFields, fields[idx-1])
+			if i > 0 {
+				b.WriteString(options.delimiter)
+			}
+			b.WriteString(fields[idx-1])
 		}
 	}
+	return b.String()
+}
 
-	var delimiter string
-	if options.delimiter == "\t" {
-		delimiter = " "
-	} else {
-		delimiter = options.delimiter
+// оптимизированный вариант для 1-символьного разделителя
+func fastSelect(line string, delim byte, fieldsIdx []int) string {
+	var b strings.Builder
+	fieldStart := 0
+	fieldNum := 1
+	idxPos := 0
+
+	for i := 0; i <= len(line); i++ {
+		if i == len(line) || line[i] == delim {
+			if idxPos < len(fieldsIdx) && fieldsIdx[idxPos] == fieldNum {
+				if b.Len() > 0 {
+					b.WriteByte(delim)
+				}
+				b.WriteString(line[fieldStart:i])
+				idxPos++
+			}
+			fieldStart = i + 1
+			fieldNum++
+		}
 	}
-	return strings.Join(selectedFields, delimiter)
+	return b.String()
 }
 
 // parseFieldsList разбирает строку с номерами полей, разделенными запятыми, и возвращает слайс индексов

@@ -69,7 +69,8 @@ func TestSelectFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := selectFields(tt.line, tt.options)
+			fieldsIdx := parseFieldsList(tt.options.fields)
+			result := selectFields(tt.line, tt.options, fieldsIdx)
 			if result != tt.expected {
 				t.Errorf("ожидалось %q, получили %q", tt.expected, result)
 			}
