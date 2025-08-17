@@ -4,100 +4,214 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
 )
 
-// parseFields разбирает строку с номерами полей и диапазонами.
-// Возвращает слайс с номерами полей (индексация с 0).
-// Например, "1,3-5" -> [0, 2, 3, 4]
-func parseFields(fieldsStr string) ([]int, error) {
-	result := make([]int, 0)
-	parts := strings.Split(fieldsStr, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.Contains(part, "-") {
-			rangeParts := strings.Split(part, "-")
-			if len(rangeParts) != 2 {
-				return nil, fmt.Errorf("invalid range format: %s", part)
-			}
+/*
+	Задание:
 
-			start, err := strconv.Atoi(rangeParts[0])
-			if err != nil {
-				return nil, fmt.Errorf("invalid number in range: %s", rangeParts[0])
-			}
-			end, err := strconv.Atoi(rangeParts[1])
-			if err != nil {
-				return nil, fmt.Errorf("invalid number in range: %s", rangeParts[1])
-			}
+	Реализовать утилиту фильтрации по аналогии с консольной утилитой
+	(man grep — смотрим описание и основные параметры).
 
-			if start > end {
-				return nil, fmt.Errorf("invalid range: start > end (%d > %d)", start, end)
-			}
+	Реализовать поддержку утилитой следующих ключей:
+	-A - "after": печатать +N строк после совпадения;
+	-B - "before": печатать +N строк до совпадения;
+	-C - "context": (A+B) печатать ±N строк вокруг совпадения;
+	-c - "count": количество строк;
+	-i - "ignore-case": игнорировать регистр;
+	-v - "invert": вместо совпадения, исключать;
+	-F - "fixed": точное совпадение со строкой, не паттерн;
+	-n - "line num": напечатать номер строки.
+*/
 
-			for i := start; i <= end; i++ {
-				result = append(result, i-1)
-			}
-		} else {
-			fieldNum, err := strconv.Atoi(part)
-			if err != nil {
-				return nil, fmt.Errorf("invalid field number: %s", part)
-			}
-			result = append(result, fieldNum-1)
-		}
-	}
-	return result, nil
+const outputFileName = "grep_result.txt"
+
+// SearchParams - структура для хранения параметров поиска
+type SearchParams struct {
+	afterLines   int
+	beforeLines  int
+	contextLines int
+	countOnly    bool
+	ignoreCase   bool
+	invertMatch  bool
+	fixedString  bool
+	lineNumber   bool
 }
 
 func main() {
-	var (
-		fieldsStr = flag.String("f", "", "Fields to print (comma-separated, can include ranges)")
-		delimiter = flag.String("d", "\t", "Field delimiter")
-		separated = flag.Bool("s", false, "Only lines containing delimiter")
-	)
+	// Флаги для запуска утилиты
+	afterLines := flag.Int("A", 0, "печатать +N строк после совпадения")
+	beforeLines := flag.Int("B", 0, "печатать +N строк до совпадения")
+	contextLines := flag.Int("C", 0, "печатать ±N строк вокруг совпадения")
+	countOnly := flag.Bool("c", false, "количество строк")
+	ignoreCase := flag.Bool("i", false, "игнорировать регистр")
+	invertMatch := flag.Bool("v", false, "вместо совпадения, исключать")
+	fixedString := flag.Bool("F", false, "точное совпадение со строкой, не паттерн")
+	lineNumber := flag.Bool("n", false, "печатать номер строки")
+
 	flag.Parse()
-	var fields []int
-	if *fieldsStr != "" {
-		var err error
-		fields, err = parseFields(*fieldsStr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing fields: %v\n", err)
-			os.Exit(1)
+
+	args := flag.Args()
+
+	if len(args) < 2 {
+		fmt.Println("Необходимо указать паттерн и имя файла.")
+		os.Exit(1)
+	}
+
+	pattern := args[0]
+	fileName := args[1]
+
+	// Создаем структуру с параметрами поиска
+	params := &SearchParams{
+		afterLines:   *afterLines,
+		beforeLines:  *beforeLines,
+		contextLines: *contextLines,
+		countOnly:    *countOnly,
+		ignoreCase:   *ignoreCase,
+		invertMatch:  *invertMatch,
+		fixedString:  *fixedString,
+		lineNumber:   *lineNumber,
+	}
+
+	file, err := os.Open(fileName)
+	if err != nil {
+		fmt.Println("Ошибка открытия файла:", err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	// Считываем строки из файла
+	var lines []string
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Println("Ошибка чтения файла:", err)
+		os.Exit(1)
+	}
+
+	// Выполняем поиск и получаем результат
+	result := findMatchingLines(lines, pattern, params)
+
+	// Открытие файла для записи
+	outputFile, err := os.Create(outputFileName)
+	if err != nil {
+		fmt.Println("Ошибка создания файла:", err)
+		os.Exit(1)
+	}
+	defer outputFile.Close()
+
+	// Пишем результаты в файл
+	if params.countOnly {
+		_, err = outputFile.WriteString(strconv.Itoa(len(result)))
+	} else {
+		for idx, line := range result {
+			_, err = outputFile.WriteString(line)
+			if idx != len(result)-1 {
+				_, err = outputFile.WriteString("\n")
+			}
+		}
+	}
+	if err != nil {
+		fmt.Println("Ошибка записи в файл:", err)
+		os.Exit(1)
+	}
+}
+
+// contains проверяет, содержится ли элемент в срезе целых чисел.
+func contains(slice []int, element int) bool {
+	for _, value := range slice {
+		if value == element {
+			return true
+		}
+	}
+	return false
+}
+
+// processLine определяет, соответствует ли строка паттерну с учётом флагов
+func processLine(line string, pattern string, params *SearchParams) bool {
+	if params.fixedString {
+		if params.ignoreCase {
+			return strings.Contains(strings.ToLower(line), strings.ToLower(pattern)) != params.invertMatch
+		}
+		return strings.Contains(line, pattern) != params.invertMatch
+	}
+
+	// Обработка паттерна с '.' (замена на произвольный символ)
+	var n []int
+	for idx, value := range pattern {
+		if value == '.' {
+			n = append(n, idx)
 		}
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
-			os.Exit(1)
-		}
+	newPattern := strings.ReplaceAll(pattern, ".", "")
+	newLines := strings.Split(line, " ")
 
-		line = strings.TrimSuffix(line, "\n")
-		if *separated && !strings.Contains(line, *delimiter) {
-			// if *separated && !strings.Contains(line, "\t") {
-
-			continue
-		}
-		line = "field1\tfield2\tfield3\tfield4"
-
-		parts := strings.Split(line, *delimiter)
-		fmt.Printf("Parts %v\n", parts)
-		// parts := strings.Split(line, "\t")
-		output := make([]string, 0)
-
-		for _, field := range fields {
-			if field >= 0 && field < len(parts) {
-				output = append(output, parts[field])
+	for _, newLine := range newLines {
+		var builder strings.Builder
+		for i, char := range newLine {
+			// contains проверяет, содержится ли элемент в срезе целых чисел.
+			if !contains(n, i) {
+				builder.WriteRune(char)
 			}
 		}
 
-		fmt.Println(strings.Join(output, *delimiter))
+		if params.ignoreCase {
+			if strings.Contains(strings.ToLower(builder.String()), strings.ToLower(newPattern)) != params.invertMatch {
+				return true
+			}
+		} else {
+			if strings.Contains(builder.String(), newPattern) != params.invertMatch {
+				return true
+			}
+		}
 	}
+
+	return false
+}
+
+// findMatchingLines ищет строки, соответствующие паттерну, и возвращает их с контекстом
+func findMatchingLines(lines []string, pattern string, params *SearchParams) []string {
+	var result []string
+	var matchingLineNumbers []int
+
+	for num, line := range lines {
+		if processLine(line, pattern, params) {
+			matchingLineNumbers = append(matchingLineNumbers, num+1)
+		}
+	}
+
+	for _, lineNumber := range matchingLineNumbers {
+		// Определяем начало и конец контекста
+		contextStart := lineNumber - params.beforeLines - 1
+		contextEnd := lineNumber + params.afterLines - 1
+
+		// Корректируем контекст если есть флаг -C
+		if params.contextLines > 0 {
+			contextStart = lineNumber - params.contextLines - 1
+			contextEnd = lineNumber + params.contextLines - 1
+		}
+
+		// Обрезаем контекст чтобы не вылезти за границы массива строк
+		if contextStart < 0 {
+			contextStart = 0
+		}
+		if contextEnd >= len(lines) {
+			contextEnd = len(lines) - 1
+		}
+
+		for i := contextStart; i <= contextEnd; i++ {
+			outputLine := lines[i]
+			if params.lineNumber {
+				outputLine = strconv.Itoa(i+1) + ":" + outputLine
+			}
+			result = append(result, outputLine)
+		}
+	}
+	return result
 }
